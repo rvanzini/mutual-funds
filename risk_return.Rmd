@@ -1,0 +1,82 @@
+---
+title: "Risk-return relationship"
+author: "Rodolfo Vanzini"
+date: "6/11/2019"
+output: 
+  html_document: 
+    self_contained: yes
+  pdf_document:
+    keep_tex: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, warning = FALSE, message = FALSE, fig.width = 6.0, fig.asp = 0.75, out.width = "67%", fig.align = "center", fig.show = 'hold', dev = c('png'))
+```
+
+I want to investigate the risk-return relationship in a 25,308 mutual funds dataset.
+
+First import the data set
+```{r import}
+library(tidyverse)
+(dt_set <- read_csv("data/funds.csv"))
+```
+
+Let's select the colums we want.
+
+```{r select-cols}
+(f_return <- dt_set %>% select(fund_name, contains("fund_mean_annual")))
+(f_stdev <- dt_set %>% select(fund_name, contains("fund_standard_deviation")))
+```
+
+Rename the columns.
+```{r rename}
+f_return <- f_return %>% 
+  rename(`3years` = fund_mean_annual_return_3years) %>% 
+  rename(`5years` = fund_mean_annual_return_5years) %>% 
+  rename(`10years` = fund_mean_annual_return_10years)
+f_stdev <- f_stdev %>% 
+  rename(`3years` = fund_standard_deviation_3years) %>% 
+  rename(`5years` = fund_standard_deviation_5years) %>% 
+  rename(`10years` = fund_standard_deviation_10years)
+```
+
+Gather columns to tidy data.
+```{r gather}
+library(magrittr)
+# beware of the %<>% sign
+f_return %<>% gather(-fund_name, key = "time", value = "return")
+f_stdev %<>% gather(-fund_name, key = "time", value = "stdev")
+```
+
+Left join in one tibble.
+```{r join}
+dt <- left_join(f_return, f_stdev)
+```
+
+Plot the data in a scatter point chart. Since there are so many points (25,308) to plot, adding an `alpha` transparency allows to see where density of funds lies. 
+```{r pl-rr-1, out.width="100%", fig.width=7.0}
+dt %>% ggplot(aes(stdev, return)) + 
+  geom_point(alpha = 1/100) + 
+  facet_wrap(~time) + 
+  stat_smooth(method = "loess")
+```
+
+Remove uninteresting data, reorder `time` and replot.
+```{r pl-rr-2, out.width="100%", fig.width=7.0}
+dt %>% filter(stdev <= 20) %>% 
+  mutate(time = factor(time, levels = c("3years", "5years", "10years"))) %>% 
+  ggplot(aes(stdev, return)) + 
+  geom_hex(bins = 50) + 
+  facet_wrap(~time) + 
+  stat_smooth(method = "loess", span = 2.0) +
+  ylim(c(-2, +4)) + 
+  labs(title = "Risk-return relationship for 25,000 mutual funds", 
+       subtitle = "Risk-return relationship is positive across different time horizons", 
+       caption = "Analysis by R. Vanzini, data source Morningstar", 
+       x = "Standard deviation (percent)", 
+       y = "Annual return (percent)")
+
+# ggsave(file = "plots/rr.png", width = 7.0, height = 5.25)
+```
+
+
